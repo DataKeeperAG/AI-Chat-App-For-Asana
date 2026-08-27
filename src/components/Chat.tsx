@@ -13,7 +13,7 @@ import type { Message } from "@/types/chat";
 // Backstop for stalls that never reach the route, which has a shorter deadline.
 const REQUEST_TIMEOUT_MS = 30_000;
 
-function errorMessageFor(error: unknown) {
+export function errorMessageFor(error: unknown) {
   // AbortSignal.timeout rejects with a TimeoutError DOMException.
   if (error instanceof DOMException && error.name === "TimeoutError") {
     return "The request timed out. Please try again.";
