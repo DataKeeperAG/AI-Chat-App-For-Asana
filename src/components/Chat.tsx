@@ -26,26 +26,45 @@ export default function Chat() {
       content,
     };
 
-    setMessages((currentMessages) => [...currentMessages, userMessage]);
+    const nextMessages = [...messages, userMessage];
+
+    setMessages(nextMessages);
 
     setIsLoading(true);
 
     try {
-      // Temporary fake API response.
-      // Replace this with fetch("/api/chat") later.
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: nextMessages.map(({ role, content }) => ({
+            role,
+            content,
+          })),
+        }),
+      });
 
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error ?? "Request failed.");
+      }
 
       const assistantMessage: Message = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: `You said: ${content}`,
+        content: data.message,
       };
 
       setMessages((currentMessages) => [...currentMessages, assistantMessage]);
     } catch (error) {
       console.error(error);
-      setError("Something went wrong. Please try again.");
+
+      setError(
+        error instanceof Error && error.message
+          ? error.message
+          : "Something went wrong. Please try again."
+      );
     } finally {
       setIsLoading(false);
     }
