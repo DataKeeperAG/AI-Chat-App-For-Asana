@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { APIConnectionTimeoutError, APIUserAbortError } from "openai";
 
-import { CHAT_MODEL, SYSTEM_PROMPT, getOpenAIClient } from "@/lib/openai";
+import {
+  CHAT_MODEL,
+  REQUEST_TIMEOUT_MS,
+  SYSTEM_PROMPT,
+  getOpenAIClient,
+} from "@/lib/openai";
 import type { Message } from "@/types/chat";
 
 type ChatTurn = Pick<Message, "role" | "content">;
@@ -31,14 +37,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const completion = await getOpenAIClient().chat.completions.create({
-      model: CHAT_MODEL,
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        // Send the whole conversation so the assistant keeps its context.
-        ...turns.map(({ role, content }) => ({ role, content })),
-      ],
-    });
+    const completion = await getOpenAIClient().chat.completions.create(
+      {
+        model: CHAT_MODEL,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          // Send the full conversation for context.
+          ...turns.map(({ role, content }) => ({ role, content })),
+        ],
+      },
+      // Cancel the upstream call if the browser disconnects.
+      { signal: request.signal }
+    );
 
     const message = completion.choices[0]?.message?.content?.trim();
 
@@ -51,6 +61,20 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ message });
   } catch (error) {
+    // Browser disconnected, so there is no body to return.
+    if (error instanceof APIUserAbortError) {
+      return new NextResponse(null, { status: 499 });
+    }
+
+    if (error instanceof APIConnectionTimeoutError) {
+      console.error(`Chat API timed out after ${REQUEST_TIMEOUT_MS}ms`);
+
+      return NextResponse.json(
+        { error: "The assistant took too long to respond. Please try again." },
+        { status: 504 }
+      );
+    }
+
     console.error("Chat API error:", error);
 
     return NextResponse.json(

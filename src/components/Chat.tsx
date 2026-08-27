@@ -10,6 +10,25 @@ import MessageList from "./MessageList";
 import { useChatHistory } from "@/hooks/useChatHistory";
 import type { Message } from "@/types/chat";
 
+// Backstop for stalls that never reach the route, which has a shorter deadline.
+const REQUEST_TIMEOUT_MS = 30_000;
+
+function errorMessageFor(error: unknown) {
+  // AbortSignal.timeout rejects with a TimeoutError DOMException.
+  if (error instanceof DOMException && error.name === "TimeoutError") {
+    return "The request timed out. Please try again.";
+  }
+
+  // fetch rejects with a TypeError when the request never reached the server.
+  if (error instanceof TypeError) {
+    return "Could not reach the server. Check your connection and try again.";
+  }
+
+  return error instanceof Error && error.message
+    ? error.message
+    : "Something went wrong. Please try again.";
+}
+
 export default function Chat() {
   const { messages, setMessages, clearMessages, isInitialized } =
     useChatHistory();
@@ -42,12 +61,18 @@ export default function Chat() {
             content,
           })),
         }),
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       });
 
-      const data = await response.json();
+      // Error responses may not carry a JSON body.
+      const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(data.error ?? "Request failed.");
+        throw new Error(data?.error ?? "Something went wrong. Please try again.");
+      }
+
+      if (!data?.message) {
+        throw new Error("The assistant returned an empty response.");
       }
 
       const assistantMessage: Message = {
@@ -60,11 +85,7 @@ export default function Chat() {
     } catch (error) {
       console.error(error);
 
-      setError(
-        error instanceof Error && error.message
-          ? error.message
-          : "Something went wrong. Please try again."
-      );
+      setError(errorMessageFor(error));
     } finally {
       setIsLoading(false);
     }
