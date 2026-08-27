@@ -1,3 +1,6 @@
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
 import type { Message as MessageType } from "@/types/chat";
 
 type MessageProps = {
@@ -19,7 +22,16 @@ export default function Message({ message }: Readonly<MessageProps>) {
             : "bg-gray-100 text-gray-900"
         }`}
       >
-        <p className="whitespace-pre-wrap">{message.content}</p>
+        {isUser ? (
+          // User text is literal, so it is not parsed as Markdown.
+          <p className="whitespace-pre-wrap">{message.content}</p>
+        ) : (
+          <div className="prose prose-sm prose-neutral max-w-none prose-pre:bg-gray-900 prose-pre:text-gray-100">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
+          </div>
+        )}
       </div>
     </article>
   );
